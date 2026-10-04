@@ -1,0 +1,214 @@
+# Dashboard "Energie systeem" (Home Assistant, secties-weergave)
+# Export van de dashboardconfiguratie. Importeren: maak een nieuw dashboard aan,
+# open het, kies het potlood > drie puntjes > "Raw configuration editor" en plak dit erin.
+# De sectie "Thuisbatterij analyse" gebruikt de helpers uit thuisbatterij_package.yaml; de secties
+# "Gas" en "Elektriciteit en PV" lezen direct de statistieken van de slimme meter en SolarEdge.
+# Sturing, warmte en airco verwijzen naar eigen apparaten en kun je weglaten of vervangen.
+
+views:
+- title: Home
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading_style: title
+      heading: Sturing
+    - type: thermostat
+      entity: climate.thermostaat_woonkamer
+    - type: entities
+      entities:
+      - switch.cv_ketel_switch_10
+    - type: entities
+      entities:
+      - switch.wall_plug_switch_6
+  - type: grid
+    cards:
+    - type: heading
+      heading: warmte opwek en gebruik
+      heading_style: title
+    - type: entities
+      entities:
+      - entity: sensor.boiler_temperatuur
+      - entity: sensor.boiler_warm_water_temperatuur
+      - entity: sensor.dl2_001e66000000_temperature_sensor_4
+      - entity: sensor.dl2_001e66000000_temperature_sensor_1
+      - entity: sensor.dl2_001e66000000_temperature_sensor_2
+      - entity: sensor.dl2_001e66000000_temperature_sensor_3
+      - entity: sensor.dl2_001e66000000_pump_speed_relay_1
+  - type: grid
+    cards:
+    - type: heading
+      heading: Gas
+      heading_style: title
+    - chart_type: line
+      period: hour
+      type: statistics-graph
+      entities:
+      - sensor.slimmemeter_gas_delivered
+      stat_types:
+      - change
+      title: Gasverbruik
+    - type: statistic
+      period:
+        calendar:
+          period: day
+      stat_type: change
+      entity: sensor.slimmemeter_gas_delivered
+      name: Gas vandaag
+    - type: statistic
+      period:
+        calendar:
+          period: month
+      stat_type: change
+      entity: sensor.slimmemeter_gas_delivered
+      name: Gas deze maand
+    - type: statistic
+      name: Gas dit jaar
+      entity: sensor.slimmemeter_gas_delivered
+      stat_type: change
+      period:
+        calendar:
+          period: year
+    - type: statistic
+      name: Gas vorig jaar
+      entity: sensor.slimmemeter_gas_delivered
+      stat_type: change
+      period:
+        calendar:
+          period: year
+          offset: -1
+    - chart_type: bar
+      period: month
+      type: statistics-graph
+      entities:
+      - sensor.slimmemeter_gas_delivered
+      stat_types:
+      - change
+      title: maandelijks gasverbruik
+    - type: statistics-graph
+      title: Gasverbruik per maand (2 jaar)
+      chart_type: bar
+      period: month
+      days_to_show: 730
+      stat_types:
+      - change
+      entities:
+      - sensor.slimmemeter_gas_delivered
+  - type: grid
+    cards:
+    - type: heading
+      heading: Elektriciteit en PV
+      heading_style: title
+    - type: entities
+      entities:
+      - sensor.slimmemeter_power_delivered_l1
+      - sensor.slimmemeter_power_delivered_l2
+      - sensor.slimmemeter_power_delivered_l3
+      - sensor.slimmemeter_power_returned_l1
+      - sensor.slimmemeter_power_returned_l2
+      - sensor.slimmemeter_power_returned_l3
+    - type: entities
+      entities:
+      - sensor.solaredge_huidig_vermogen
+    - type: statistic
+      period:
+        calendar:
+          period: day
+      stat_type: change
+      entity: sensor.khw_uur
+    - chart_type: bar
+      period: day
+      type: statistics-graph
+      entities:
+      - sensor.khw_uur
+      stat_types:
+      - change
+      title: PV opbrengst per dag
+    - chart_type: bar
+      period: month
+      type: statistics-graph
+      entities:
+      - sensor.khw_uur
+      stat_types:
+      - change
+      title: PV opbrengst per maand
+  - type: grid
+    cards:
+    - type: heading
+      heading: Thuisbatterij analyse
+      heading_style: title
+    - type: entities
+      title: Vandaag
+      entities:
+      - entity: sensor.teruglevering_per_dag
+        name: Teruglevering (had batterij in gekund)
+      - entity: sensor.afname_per_dag
+        name: Afname (had batterij uit gekund)
+      - entity: sensor.netto_per_dag
+        name: Netto (+ afname / − teruglevering)
+      - entity: sensor.verschuifbare_energie_vandaag
+        name: Verschuifbaar via batterij
+      - entity: sensor.afname_zonder_pv_per_dag
+        name: Afname zonder PV
+    - type: statistics-graph
+      title: Ideale accugrootte per dag (30 dagen)
+      chart_type: bar
+      period: day
+      days_to_show: 30
+      stat_types:
+      - max
+      entities:
+      - entity: sensor.ideale_accugrootte_vandaag
+        name: Ideale accugrootte
+    - type: statistics-graph
+      title: Afname en teruglevering per dag (60 dagen)
+      chart_type: bar
+      period: day
+      days_to_show: 60
+      stat_types:
+      - change
+      entities:
+      - entity: sensor.slimmemeter_energy_delivered_tariff_1
+        name: Afname T1
+      - entity: sensor.slimmemeter_energy_delivered_tariff_2
+        name: Afname T2
+      - entity: sensor.slimmemeter_energy_returned_tariff_1
+        name: Teruglevering T1
+      - entity: sensor.slimmemeter_energy_returned_tariff_2
+        name: Teruglevering T2
+  - type: grid
+    cards:
+    - type: heading
+      heading: airco
+      heading_style: title
+    - type: thermostat
+      entity: climate.woonkamer
+      features:
+      - type: climate-hvac-modes
+        hvac_modes:
+        - 'off'
+        - heat
+        - dry
+        - cool
+        - fan_only
+        - heat_cool
+    - type: entities
+      entities:
+      - sensor.woonkamer_energie
+    - type: entities
+      entities:
+      - sensor.uptime
+    - chart_type: line
+      period: hour
+      type: statistics-graph
+      entities:
+      - sensor.woonkamer_energie
+      stat_types:
+      - change
+      title: Verbruik airco
+    - type: statistic
+      period:
+        calendar:
+          period: day
+      stat_type: change
+      entity: sensor.woonkamer_energie

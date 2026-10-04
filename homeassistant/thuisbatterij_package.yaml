@@ -1,0 +1,74 @@
+# YAML-equivalent van de helpers die via de UI (Instellingen > Helpers) zijn aangemaakt.
+# Alleen nodig om de opzet op een andere installatie te reproduceren; niet naast de
+# UI-helpers laden, anders ontstaan dubbele entiteiten.
+# Plaats in /config/packages/ en zet in configuration.yaml:
+#   homeassistant:
+#     packages: !include_dir_named packages
+
+template:
+  - sensor:
+      - name: "Afname totaal"
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        state: >
+          {{ (states('sensor.slimmemeter_energy_delivered_tariff_1') | float(0)
+            + states('sensor.slimmemeter_energy_delivered_tariff_2') | float(0)) | round(3) }}
+      - name: "Teruglevering totaal"
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        state: >
+          {{ (states('sensor.slimmemeter_energy_returned_tariff_1') | float(0)
+            + states('sensor.slimmemeter_energy_returned_tariff_2') | float(0)) | round(3) }}
+      - name: "Afname zonder PV vermogen"
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% if states('sensor.solaredge_huidig_vermogen') | float(0) < 0.05 %}
+            {{ (states('sensor.slimmemeter_power_consumed') | float(0) * 1000) | round(0) }}
+          {% else %}0{% endif %}
+      - name: "Netto per dag"
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        state: >
+          {{ (states('sensor.afname_per_dag') | float(0)
+            - states('sensor.teruglevering_per_dag') | float(0)) | round(2) }}
+      - name: "Verschuifbare energie vandaag"
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        state: >
+          {{ [states('sensor.afname_per_dag') | float(0),
+              states('sensor.teruglevering_per_dag') | float(0)] | min | round(2) }}
+      - name: "Ideale accugrootte vandaag"
+        unit_of_measurement: "kWh"
+        state_class: measurement
+        state: >
+          {{ [states('sensor.teruglevering_per_dag') | float(0),
+              states('sensor.afname_zonder_pv_per_dag') | float(0)] | min | round(2) }}
+
+sensor:
+  - platform: integration
+    name: "Energie afname zonder PV"
+    source: sensor.afname_zonder_pv_vermogen
+    method: left
+    round: 3
+    unit_prefix: k
+    unit_time: h
+
+utility_meter:
+  afname_per_dag:
+    source: sensor.afname_totaal
+    cycle: daily
+  teruglevering_per_dag:
+    source: sensor.teruglevering_totaal
+    cycle: daily
+  afname_zonder_pv_per_dag:
+    source: sensor.energie_afname_zonder_pv
+    cycle: daily
+  gasverbruik_per_jaar:
+    source: sensor.slimmemeter_gas_delivered
+    cycle: yearly
