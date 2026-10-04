@@ -31,7 +31,7 @@ Voor het verbruik op momenten dat de panelen niets leveren geeft een template-se
 
 Al deze sensoren staan op het dashboard "Energie systeem", dat is ingedeeld in secties voor sturing, warmte, gas, elektriciteit en PV, de batterijanalyse en de airco. De batterijsectie toont de dagwaarden, een staafgrafiek van de ideale accugrootte over dertig dagen en een grafiek van afname en teruglevering per dag over zestig dagen. Die laatste leest rechtstreeks uit de historie van de tarieftellers en was daardoor meteen gevuld; de nieuwe hulpsensoren bouwen hun historie pas op vanaf het moment van aanmaken.
 
-De map `homeassistant/` bevat een YAML-package met dezelfde helpers, bedoeld om de opzet op een andere installatie na te bouwen. Op de oorspronkelijke installatie zijn ze via de gebruikersinterface aangemaakt, dus daar hoeft dit bestand niet geladen te worden.
+De map `homeassistant/` bevat twee bestanden om de opzet op een andere installatie na te bouwen. `thuisbatterij_package.yaml` is een YAML-package met dezelfde helpers; op de oorspronkelijke installatie zijn die via de gebruikersinterface aangemaakt, dus daar hoeft het niet geladen te worden. `dashboard_energie_systeem.yaml` is de volledige configuratie van het dashboard, die je via de raw configuration editor van een nieuw dashboard kunt plakken. De sectie met de batterijanalyse werkt zodra de helpers bestaan; de secties voor sturing, warmte en airco verwijzen naar eigen apparaten en kun je weglaten.
 
 ## De simulatie
 
