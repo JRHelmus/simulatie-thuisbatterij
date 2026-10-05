@@ -1,0 +1,269 @@
+# =====================================================================
+# Boiler- en batterijsturing op PV-overschot (situatie na 1 januari 2027)
+#
+# Uitgangspunt: zonder saldering levert teruggeleverde stroom vrijwel niets op.
+# Elke kWh overschot hoort daarom eerst in eigen verbruik, dan in de batterij,
+# dan als warmte in het vat. Terugleveren is het laatste redmiddel.
+# De heat pipes hebben altijd voorrang op het elektrische element: het element
+# verwarmt alleen wat de zon via de heat pipes vandaag niet meer haalt.
+#
+# Benodigd: drie Forecast.Solar-vlakken, een P1-meter, temperatuursensoren van het vat
+# en de collector, en per fase een schakelaar voor het 3x2 kW-element.
+#   - "Zonnepanelen oost"  (4,5 kWp, azimut 90)   -> sensor.pv_oost_*
+#   - "Zonnepanelen west"  (4,5 kWp, azimut 270)  -> sensor.pv_west_*
+#   - "Heat pipes zon"     (3,6 kWp, azimut 180)  -> sensor.heatpipes_zon_*
+# Het derde vlak is virtueel: het voorspelt de zon op het zuiden voor de heat pipes.
+# 3,6 kWp is zo gekozen dat de voorspelde kWh direct de verwachte zonnewarmte is:
+# historie geeft 0,46 kWh warmte per kWh PV, en 9 kWp oost-west levert ca. 87% van
+# 9 kWp zuid, dus 0,46 x 9 x 0,87 = 3,6.
+#
+# >>> PLAATSHOUDERS: vervang switch.boiler_element_l1/l2/l3 door de echte
+#     schakelaars zodra het element per fase schakelbaar is. Een batterij is
+#     optioneel: zonder sensor.batterij_soc rekent het algoritme alsof er geen is.
+# =====================================================================
+
+input_boolean:
+  boiler_algoritme_actief:
+    name: "Boileralgoritme actief"
+    icon: mdi:water-boiler-auto
+  zwembad_buren_toegestaan:
+    name: "Warmte naar zwembad buren toegestaan"
+    icon: mdi:pool
+
+input_number:
+  boiler_doeltemperatuur:
+    name: "Boiler doeltemperatuur"
+    min: 40
+    max: 70
+    step: 1
+    initial: 60
+    unit_of_measurement: "°C"
+  boiler_opslagtemperatuur:
+    name: "Boiler opslagtemperatuur bij overschot"
+    min: 60
+    max: 85
+    step: 1
+    initial: 75
+    unit_of_measurement: "°C"
+  zwembad_aan_temperatuur:
+    name: "Zwembadpomp aan boven"
+    min: 70
+    max: 95
+    step: 1
+    initial: 85
+    unit_of_measurement: "°C"
+  zwembad_uit_temperatuur:
+    name: "Zwembadpomp uit onder"
+    min: 60
+    max: 90
+    step: 1
+    initial: 78
+    unit_of_measurement: "°C"
+  heatpipe_factor:
+    name: "Correctie heat pipe-voorspelling"
+    min: 0
+    max: 2
+    step: 0.05
+    initial: 1.0   # 1,0 = zonvoorspelling 'Heat pipes zon' is direct de warmte in kWh
+  nachtbehoefte_kwh:
+    name: "Benodigde batterij-inhoud voor de nacht"
+    min: 0
+    max: 20
+    step: 0.5
+    initial: 7
+    unit_of_measurement: "kWh"
+  batterij_capaciteit_kwh:
+    name: "Batterijcapaciteit (0 = geen batterij)"
+    min: 0
+    max: 30
+    step: 0.5
+    initial: 0
+    unit_of_measurement: "kWh"
+  huis_basislast_w:
+    name: "Basislast huis overdag"
+    min: 0
+    max: 3000
+    step: 50
+    initial: 400
+    unit_of_measurement: "W"
+
+template:
+  - sensor:
+      - name: "Boiler gemiddelde temperatuur"
+        unique_id: boiler_gemiddelde_temperatuur
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        state: >
+          {{ ((states('sensor.dl2_001e66000000_temperature_sensor_3') | float(0)
+             + states('sensor.dl2_001e66000000_temperature_sensor_2') | float(0)) / 2) | round(1) }}
+
+      # 500 liter water: 500 x 4,186 kJ/kgK / 3600 = 0,581 kWh per graad
+      - name: "Boiler tekort tot doel"
+        unique_id: boiler_tekort_tot_doel
+        unit_of_measurement: "kWh"
+        state: >
+          {{ [0, 0.581 * (states('input_number.boiler_doeltemperatuur') | float(60)
+              - states('sensor.boiler_gemiddelde_temperatuur') | float(0))] | max | round(2) }}
+
+      # Verwachte heat pipe-opbrengst rest van de dag uit het virtuele zuidvlak,
+      # lager naarmate het vat warmer is (historie: 0,50 bij 30-50 graden, 0,41 bij 60-70).
+      - name: "Heat pipes verwachte opbrengst rest dag"
+        unique_id: heatpipes_verwachte_opbrengst
+        unit_of_measurement: "kWh"
+        state: >
+          {% set rest = states('sensor.heatpipes_zon_energy_production_today_remaining') | float(0) %}
+          {% set t = states('sensor.boiler_gemiddelde_temperatuur') | float(0) %}
+          {% set rendement = [0, [1, 1 - (t - 30) / 180] | min] | max %}
+          {{ (rest * states('input_number.heatpipe_factor') | float(1) * rendement / 0.9) | round(2) }}
+
+      - name: "Boiler restvraag voor element"
+        unique_id: boiler_restvraag_element
+        unit_of_measurement: "kWh"
+        state: >
+          {{ [0, states('sensor.boiler_tekort_tot_doel') | float(0)
+              - states('sensor.heat_pipes_verwachte_opbrengst_rest_dag') | float(0)] | max | round(2) }}
+
+      - name: "Batterij ruimte voor de nacht"
+        unique_id: batterij_ruimte_nacht
+        unit_of_measurement: "kWh"
+        state: >
+          {% set cap = states('input_number.batterij_capaciteit_kwh') | float(0) %}
+          {% if cap == 0 or not has_value('sensor.batterij_soc') %}0
+          {% else %}
+            {% set inhoud = cap * states('sensor.batterij_soc') | float(0) / 100 %}
+            {% set doel = [cap, states('input_number.nachtbehoefte_kwh') | float(0)] | min %}
+            {{ [0, doel - inhoud] | max | round(2) }}
+          {% endif %}
+
+      # Verwacht overschot rest van de dag: PV-voorspelling oost + west minus basislast tot zonsondergang
+      - name: "PV verwacht overschot rest dag"
+        unique_id: pv_verwacht_overschot
+        unit_of_measurement: "kWh"
+        state: >
+          {% set rest = states('sensor.pv_oost_energy_production_today_remaining') | float(0)
+                      + states('sensor.pv_west_energy_production_today_remaining') | float(0) %}
+          {% set ondergang = as_datetime(state_attr('sun.sun', 'next_setting')) %}
+          {% set uren = [0, (ondergang - now()).total_seconds() / 3600] | max if ondergang else 0 %}
+          {% set uren = uren if uren < 16 else 0 %}
+          {% set last = states('input_number.huis_basislast_w') | float(400) / 1000 * uren %}
+          {{ [0, rest - last] | max | round(2) }}
+
+      # Overschot in W als het element uit zou staan (netto export + huidig elementvermogen)
+      - name: "Overschot zonder element"
+        unique_id: overschot_zonder_element
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set fasen = ['switch.boiler_element_l1', 'switch.boiler_element_l2', 'switch.boiler_element_l3']
+                         | select('is_state', 'on') | list | count %}
+          {% set netto_export = (states('sensor.slimmemeter_power_returned') | float(0)
+                               - states('sensor.slimmemeter_power_consumed') | float(0)) * 1000 %}
+          {% set batterij = states('sensor.batterij_laadvermogen') | float(0)
+                            if is_state('binary_sensor.boiler_voor_batterij', 'on') else 0 %}
+          {{ (netto_export + fasen * 2000 + batterij) | round(0) }}
+
+      # Gewenst aantal fasen (0-3), met hysterese rond het huidige aantal
+      - name: "Boiler gewenste fasen"
+        unique_id: boiler_gewenste_fasen
+        state: >
+          {% set huidig = ['switch.boiler_element_l1', 'switch.boiler_element_l2', 'switch.boiler_element_l3']
+                          | select('is_state', 'on') | list | count %}
+          {% if not is_state('binary_sensor.boiler_element_vrijgegeven', 'on') %}0
+          {% else %}
+            {% set beschikbaar = states('sensor.overschot_zonder_element') | float(0) %}
+            {% set n = [0, [3, ((beschikbaar - 200) / 2000) | int] | min] | max %}
+            {% if n < huidig and beschikbaar > huidig * 2000 - 400 %}{{ huidig }}{% else %}{{ n }}{% endif %}
+          {% endif %}
+
+  - binary_sensor:
+      # Ruim overschot: de batterij komt vandaag hoe dan ook vol, dus het element
+      # mag ook het laadvermogen van de batterij gebruiken.
+      - name: "Boiler voor batterij"
+        unique_id: boiler_voor_batterij
+        state: >
+          {{ states('sensor.pv_verwacht_overschot_rest_dag') | float(0)
+             > 1.3 * (states('sensor.batterij_ruimte_voor_de_nacht') | float(0)
+                      + states('sensor.boiler_restvraag_voor_element') | float(0)) + 2 }}
+
+      # Heat pipes over hun piek: collector nauwelijks warmer dan de onderkant van het vat,
+      # of meer dan twee uur na de voorspelde zonpiek op het zuiden.
+      - name: "Heat pipes over de piek"
+        unique_id: heatpipes_over_piek
+        state: >
+          {% set dt = states('sensor.dl2_001e66000000_temperature_sensor_1') | float(0)
+                    - states('sensor.dl2_001e66000000_temperature_sensor_2') | float(0) %}
+          {% set piek = as_datetime(states('sensor.heatpipes_zon_power_highest_peak_time_today')) %}
+          {{ dt < 5 or (piek is not none and now() > piek + timedelta(hours=2)) }}
+
+      # Mag het element aan? Twee redenen:
+      #  A) behoefte: het vat haalt de doeltemperatuur niet meer met alleen de heat pipes
+      #  B) opslag: er gaat anders stroom verloren aan teruglevering en de heat pipes zijn over hun piek
+      # Altijd uit boven de opslagtemperatuur of als de zwembadpomp warmte afvoert.
+      - name: "Boiler element vrijgegeven"
+        unique_id: boiler_element_vrijgegeven
+        state: >
+          {% set top = states('sensor.dl2_001e66000000_temperature_sensor_3') | float(99) %}
+          {% set doel = states('input_number.boiler_doeltemperatuur') | float(60) %}
+          {% set opslag = states('input_number.boiler_opslagtemperatuur') | float(75) %}
+          {% set behoefte = states('sensor.boiler_restvraag_voor_element') | float(0) > 0.3 and top < doel %}
+          {% set opslaan = is_state('binary_sensor.heat_pipes_over_de_piek', 'on') and top < opslag %}
+          {{ is_state('input_boolean.boiler_algoritme_actief', 'on')
+             and is_state('switch.wall_plug_switch_6', 'off')
+             and (behoefte or opslaan) }}
+
+automation:
+  - id: boiler_element_fasen_sturen
+    alias: "Boiler: element per fase op overschot"
+    mode: restart
+    trigger:
+      # gewenst aantal fasen moet 2 minuten stabiel zijn (tegen wolken en klapperende relais)
+      - platform: state
+        entity_id: sensor.boiler_gewenste_fasen
+        for: "00:02:00"
+      # uitschakelen gebeurt direct
+      - platform: state
+        entity_id: binary_sensor.boiler_element_vrijgegeven
+        to: "off"
+    action:
+      - variables:
+          n: "{{ states('sensor.boiler_gewenste_fasen') | int(0) }}"
+      - service: switch.turn_on
+        target:
+          entity_id: >
+            {{ ['switch.boiler_element_l1', 'switch.boiler_element_l2', 'switch.boiler_element_l3'][:n] or 'none' }}
+      - service: switch.turn_off
+        target:
+          entity_id: >
+            {{ ['switch.boiler_element_l1', 'switch.boiler_element_l2', 'switch.boiler_element_l3'][n:] or 'none' }}
+
+  - id: boiler_warmte_naar_zwembad
+    alias: "Boiler: overtollige warmte naar zwembad buren"
+    mode: single
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.dl2_001e66000000_temperature_sensor_3
+        above: input_number.zwembad_aan_temperatuur
+        for: "00:05:00"
+      - platform: numeric_state
+        entity_id: sensor.dl2_001e66000000_temperature_sensor_3
+        below: input_number.zwembad_uit_temperatuur
+        for: "00:05:00"
+    action:
+      - choose:
+          - conditions:
+              - condition: numeric_state
+                entity_id: sensor.dl2_001e66000000_temperature_sensor_3
+                above: input_number.zwembad_aan_temperatuur
+              - condition: state
+                entity_id: input_boolean.zwembad_buren_toegestaan
+                state: "on"
+            sequence:
+              - service: switch.turn_on
+                target:
+                  entity_id: switch.wall_plug_switch_6
+        default:
+          - service: switch.turn_off
+            target:
+              entity_id: switch.wall_plug_switch_6
