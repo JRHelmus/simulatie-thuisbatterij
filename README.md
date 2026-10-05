@@ -43,6 +43,18 @@ De notebook simuleert per uur een batterij die laadt uit teruglevering en alleen
 
 `thuisbatterij_analyse_v2.xlsx` bevat de dagwaarden over 400 dagen (29-08-2025 t/m 02-10-2026), een eigen Excel-berekening van de ideale accugrootte met instelbaar vermogen en rendement, histogrammen over het jaar en per seizoen en een samenvatting. De Excel-berekening werkt met dagtotalen per venster en komt goed overeen met de uursimulatie (mediaan 4,0 tegen 3,9 kWh). In de reeks zitten negen dagen zonder meetdata; de dag erna bevat telkens de ingehaalde afname in één keer.
 
+## Gevoeligheid: rendement en vermogen van de accu
+
+Twee extra notebooks rekenen dezelfde uursimulatie door voor batterijen van 5 tot 30 kWh. `scan_rendement_accu.ipynb` varieert het round-trip rendement van 40 tot 90% bij 2,5 kW vermogen, `scan_vermogen_accu.ipynb` het laad- en ontlaadvermogen van 1 tot 12 kW in stappen van 0,5 kW bij 80% rendement. Beide maken een scatterplot met het rendement of vermogen op de x-as, de ideale accugrootte (de grootte die op 80% van de dagen volstaat) op de y-as en een kleur per capaciteit, met daarnaast de jaaropbrengst.
+
+Het rendement verschuift de ideale grootte weinig: van 6,3 kWh bij 90% naar 7,8 kWh bij 40%. Bij meer verlies moet je meer opslaan voor dezelfde nacht, maar komt er ook minder in de accu, en die effecten heffen elkaar grotendeels op. De jaaropbrengst daalt wel fors: een batterij van 10 kWh levert 1.455 kWh per jaar bij 90% en 1.090 kWh bij 40%. Het vermogen telt vooral onderin. Van 1 naar 2 kW stijgt de opbrengst van een batterij van 10 kWh van 1.256 naar 1.394 kWh per jaar, boven 3 kW komt er nog geen 20 kWh bij. De ideale grootte loopt mee van 5,7 naar 6,8 kWh. Vanaf 10 à 15 kWh vallen alle lijnen samen, omdat geen enkele dag meer vraagt.
+
+## Boiler en heat pipes
+
+`analyse_boiler_heatpipes.ipynb` analyseert een hygiëneboiler van 500 liter met 120 heat pipes op het zuiden. Uit de uurstatistieken van collector- en vattemperaturen, de bedrijfsuren van de solarpomp en de PV-opbrengst bepaalt de notebook per dag hoe warm het vat wordt en hoeveel zonnewarmte de heat pipes toevoegen. Dagen waarop warmte naar een zwembad is afgevoerd, worden herkend en buiten de kalibratie gehouden. Over 526 dagen leveren de heat pipes gemiddeld 0,46 kWh warmte per kWh PV-opbrengst, iets meer bij een koel vat en iets minder bij een warm vat. Van april tot en met september halen ze op de meeste dagen zelf 60 °C.
+
+`homeassistant/boiler_overschot_algoritme.yaml` is een package voor de situatie na het einde van de salderingsregeling in 2027, als teruggeleverde stroom vrijwel niets meer oplevert. Het schakelt een element van 3 × 2 kW per fase op PV-overschot. De heat pipes hebben voorrang: het element verwarmt alleen wat de zon vandaag niet meer haalt, of slaat overschot op nadat de heat pipes over hun piek zijn. Een batterij gaat voor het vat tot er genoeg in zit voor de nacht. Het algoritme gebruikt drie Forecast.Solar-vlakken: oost en west voor de panelen en een virtueel zuidvlak dat de verwachte zonnewarmte voorspelt. Bij een te heet vat schakelt het een pomp in die warmte afvoert. De schakelaars voor het element zijn nog plaatshouders.
+
 ## Gebruik op een andere installatie
 
 Benodigd is Python 3 met pandas, numpy en matplotlib (zie `requirements.txt`). Pas bovenin de notebook de entity-id's van de tarieftellers aan, en in het YAML-package ook die van het PV-vermogen en de gasteller.
