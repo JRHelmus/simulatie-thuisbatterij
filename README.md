@@ -55,6 +55,22 @@ Het rendement verschuift de ideale grootte weinig: van 6,3 kWh bij 90% naar 7,8 
 
 `homeassistant/boiler_overschot_algoritme.yaml` is een package voor de situatie na het einde van de salderingsregeling in 2027, als teruggeleverde stroom vrijwel niets meer oplevert. Het schakelt een element van 3 × 2 kW per fase op PV-overschot. De heat pipes hebben voorrang: het element verwarmt alleen wat de zon vandaag niet meer haalt, of slaat overschot op nadat de heat pipes over hun piek zijn. Een batterij gaat voor het vat tot er genoeg in zit voor de nacht. Het algoritme gebruikt drie Forecast.Solar-vlakken: oost en west voor de panelen en een virtueel zuidvlak dat de verwachte zonnewarmte voorspelt. Bij een te heet vat schakelt het een pomp in die warmte afvoert. De schakelaars voor het element zijn nog plaatshouders.
 
+## Business case
+
+De business case rekent met een vast (niet-dynamisch) contract met deze tarieven: stroom €0,26465 per kWh (enkeltarief), een terugleververgoeding van €0,141 en terugleverkosten van €0,13099 per kWh, en gas €1,45822 per m³. Netto levert een teruggeleverde kWh daarmee ongeveer €0,01 op. Vaste leverings- en netbeheerkosten veranderen niet door een batterij en tellen niet mee. Tot eind 2026 geldt de salderingsregeling en levert een batterij vrijwel niets op; de berekening gaat uit van de situatie vanaf 1 januari 2027.
+
+De jaarlijkse opbrengst is de geleverde energie uit de accu maal de inkoopprijs, min de geladen energie maal de netto terugleverwaarde (die stroom had je anders teruggeleverd), min het sluipverbruik van de accu maal de inkoopprijs. De geleverde en geladen hoeveelheden komen uit de uursimulatie op eigen data; `scan_homewizard.ipynb` rekent ze door voor de HomeWizard Plug-In Battery.
+
+| Configuratie | Geleverd per jaar | Netto per jaar | Prijs | Terugverdientijd |
+|---|---|---|---|---|
+| Thuisbatterij 5 kWh, 2,5 kW, 80%, ca. 30 W sluipverbruik | 1.090 kWh | ≈ €205 | €3.000 – €4.500 | 15 – 22 jaar |
+| HomeWizard, 1 module (2,47 kWh bruikbaar, 0,8 kW, 75%, 1 W) | 615 kWh | ≈ €152 | ≈ €1.000 tweedehands / €1.195 nieuw | 7 – 8 jaar |
+| HomeWizard, 2 modules (4,9 kWh bruikbaar, 1,6 kW, 75%) | 1.048 kWh | ≈ €259 | ≈ €2.000 / €2.390 | 8 – 9 jaar |
+
+De HomeWizard-modules scoren beter dan een vaste thuisbatterij, niet omdat ze meer opslaan, maar door de lage aanschafprijs, het verwaarloosbare sluipverbruik en het ontbreken van installatiekosten. Eén module gaat bijna dagelijks vol en leeg (ongeveer 330 cycli per jaar), waardoor de opgegeven 6.000 cycli pas na ruim 15 jaar bereikt worden. Een tweede module voegt minder toe dan de eerste: 433 tegenover 615 kWh per jaar. De prijzen zijn indicatief; de tweedehandsprijzen komen uit advertenties van oktober 2026.
+
+De uitkomst hangt sterk af van de netto terugleverwaarde. Is de vergoeding van €0,141 al netto, dus na aftrek van de terugleverkosten, dan kost elke opgeslagen kWh €0,14 aan gemiste vergoeding en zakt de opbrengst van één HomeWizard-module naar ongeveer €45 per jaar; dan verdient geen van de opties zich terug. Ter vergelijking: warmte uit gas kost bij dit gastarief ongeveer €0,17 per kWh (bij 90% ketelrendement), dus overschot dat via het element in de boiler gaat, bespaart per kWh minder dan een batterij maar vraagt vrijwel geen investering.
+
 ## Gebruik op een andere installatie
 
 Benodigd is Python 3 met pandas, numpy en matplotlib (zie `requirements.txt`). Pas bovenin de notebook de entity-id's van de tarieftellers aan, en in het YAML-package ook die van het PV-vermogen en de gasteller.
